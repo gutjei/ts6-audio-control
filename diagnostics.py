@@ -26,6 +26,17 @@ def run(output):
         if dll.RouterSelfTest() != 0:
             raise RuntimeError('Native mixer self-check failed')
         result['checks'].append('native mixer')
+        from audio_inventory import AudioInventory
+        inventory = AudioInventory()
+        try:
+            deadline = time.monotonic() + 10
+            while inventory.snapshot() is None:
+                if time.monotonic() > deadline:
+                    raise RuntimeError('Core Audio inventory did not initialize')
+                inventory.wait(.25)
+            result['checks'].append('Core Audio event subscriptions')
+        finally:
+            inventory.close()
         with tempfile.TemporaryDirectory(prefix='ts6-diagnostics-') as temporary:
             ready = Path(temporary) / 'ready'
             child = subprocess.Popen(clock_command() + ['--ready-file', str(ready)], creationflags=subprocess.CREATE_NO_WINDOW)
@@ -45,6 +56,7 @@ def run(output):
             if script.exports_sync.selftest() != 0:
                 raise RuntimeError('Injected mixer self-check failed')
             script.exports_sync.configure([], [])
+            script.exports_sync.heartbeat()
             if len(script.exports_sync.stats()) != 16 or errors:
                 raise RuntimeError(f'Frida diagnostic failed: {errors}')
             result['checks'].append('Frida + bundled JS + injected DLL')

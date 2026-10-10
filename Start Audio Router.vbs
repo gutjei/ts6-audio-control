@@ -4,7 +4,7 @@ Set shell = CreateObject("WScript.Shell")
 Set fs = CreateObject("Scripting.FileSystemObject")
 folder = fs.GetParentFolderName(WScript.ScriptFullName)
 shell.CurrentDirectory = folder
-If Not fs.FileExists(folder & "\build\audio_router_volume.dll") Then
+If Not fs.FileExists(folder & "\build\audio_mixer.dll") Or Not fs.FileExists(folder & "\build\audio_inventory.dll") Then
     MsgBox "Build the native mixer first: build-native.cmd. See README.md.", 16, "TeamSpeak Audio Control"
     WScript.Quit 1
 End If

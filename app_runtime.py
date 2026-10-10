@@ -13,7 +13,7 @@ LOG_DIR = DATA_DIR / 'logs' if FROZEN else ROOT / '_local' / 'logs'
 
 
 def native_library():
-    source = ROOT / 'build' / 'audio_router_volume.dll'
+    source = ROOT / 'build' / 'audio_mixer.dll'
     if not FROZEN:
         return source
     # TeamSpeak can keep the injected DLL loaded after our UI exits. Keep it

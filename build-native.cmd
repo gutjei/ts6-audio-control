@@ -16,5 +16,7 @@ if errorlevel 1 exit /b 1
 set "ROUTER_OUT=build"
 if not "%~1"=="" set "ROUTER_OUT=%~1"
 if not exist "%ROUTER_OUT%" mkdir "%ROUTER_OUT%"
-cl /nologo /std:c++17 /EHsc /O2 /MT /W4 /LD /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A00000A native\router.cpp /Fo"%ROUTER_OUT%\router.obj" /Fe"%ROUTER_OUT%\audio_router_volume.dll" /link ole32.lib mmdevapi.lib uuid.lib
+cl /nologo /std:c++17 /EHsc /O2 /MT /W4 /LD /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A00000A native\router.cpp /Fo"%ROUTER_OUT%\router.obj" /Fe"%ROUTER_OUT%\audio_mixer.dll" /link ole32.lib mmdevapi.lib uuid.lib
+if errorlevel 1 exit /b 1
+cl /nologo /std:c++17 /EHsc /O2 /MT /W4 /LD /D_WIN32_WINNT=0x0A00 native\audio_inventory.cpp /Fo"%ROUTER_OUT%\audio_inventory.obj" /Fe"%ROUTER_OUT%\audio_inventory.dll" /link ole32.lib mmdevapi.lib uuid.lib
 exit /b %errorlevel%

@@ -5,7 +5,7 @@ frida_data, frida_binaries, frida_imports = collect_all('frida')
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=frida_binaries + [('build/audio_router_volume.dll', 'build')],
+    binaries=frida_binaries + [('build/audio_mixer.dll', 'build'), ('build/audio_inventory.dll', 'build')],
     datas=frida_data + [('live_router.js', '.'), ('README.md', '.')],
     hiddenimports=frida_imports,
     hookspath=[],

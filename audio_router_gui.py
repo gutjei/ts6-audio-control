@@ -50,8 +50,7 @@ class App:
         self.rule_status = tk.StringVar(value='Include выбирает автоматически; галочка задаёт выбор вручную. Exclude всегда главнее.')
         ttk.Label(outer, textvariable=self.rule_status, wraplength=720, foreground='#94a3b8').pack(anchor='w', pady=(3, 12))
         toolbar = ttk.Frame(outer); toolbar.pack(fill='x', pady=(0, 8))
-        self.show_all = tk.BooleanVar(value=False)
-        ttk.Checkbutton(toolbar, text='Все запущенные exe', variable=self.show_all, command=self.refresh).pack(side='left')
+        ttk.Button(toolbar, text='Обновить аудиосессии', command=self.backend.refresh_sources).pack(side='left')
         ttk.Button(toolbar, text='Сбросить ручной выбор', command=self.reset_manual).pack(side='right')
         footer = ttk.Frame(outer); footer.pack(side='bottom', fill='x')
         body = ttk.Frame(outer); body.pack(fill='both', expand=True)
@@ -169,22 +168,21 @@ class App:
             return
         data = self.snapshot
         rules = compile_rules(self.settings['include'], self.settings['exclude'])
-        running = {p['name'].lower() for p in data['processes']}
         names = set(data['audio']) | set(self.settings['overrides']) | set(self.settings['volumes'])
-        names |= {n for n in running if decide(n, self.settings['overrides'], rules)[0]}
-        if self.show_all.get():
-            names |= running
         old = set(self.tree.get_children())
         for name in sorted(names):
             active, reason = decide(name, self.settings['overrides'], rules)
             blocked = data['blocked'].get(name)
             if blocked:
                 reason = 'Блок: ' + ', '.join(blocked)
-            state = 'активна' if data['audio'].get(name) == 1 else 'есть, молчит' if name in data['audio'] else 'нет сессии' if name in running else 'не запущено'
+            state = 'активна' if data['audio'].get(name) == 1 else 'есть, молчит' if name in data['audio'] else 'нет аудиосессии'
             values = ('☑' if active else '☐', name, f"{self.settings['volumes'].get(name, 100):g}%", state, reason)
             tags = ('blocked',) if blocked else ('on',) if active else ()
             if name in old:
-                self.tree.item(name, values=values, tags=tags); old.remove(name)
+                current = self.tree.item(name)
+                if tuple(map(str, current['values'])) != tuple(map(str, values)) or tuple(current['tags']) != tags:
+                    self.tree.item(name, values=values, tags=tags)
+                old.remove(name)
             else:
                 self.tree.insert('', 'end', iid=name, values=values, tags=tags)
         for name in old:
@@ -210,9 +208,9 @@ class App:
                 break
             if kind == 'snapshot':
                 self.snapshot = value; self.refresh()
-                if value['stats']:
-                    contexts, sources, packets, audible, errors, code = value['stats'][:6]
-                    self.stats.set(('Ожидаю новый захват: перезапусти шаринг с включённым звуком.' if not contexts else f'Потоков: {contexts}  ·  Источников: {sources}  ·  Пакетов со звуком: {audible}  ·  Буфер: 100 мс') + (f'  ·  Ошибка 0x{code:08x} ({errors})' if errors else ''))
+            elif kind == 'stats':
+                contexts, sources, packets, audible, errors, code = value[:6]
+                self.stats.set(('Ожидаю новый захват: перезапусти шаринг с включённым звуком.' if not contexts else f'Потоков: {contexts}  ·  Источников: {sources}  ·  Пакетов со звуком: {audible}  ·  Буфер: 100 мс') + (f'  ·  Ошибка 0x{code:08x} ({errors})' if errors else ''))
             elif kind == 'connected':
                 self.connected = True; self.status.set(f'Подключено · TeamSpeak PID {value}')
                 self.connect_button.configure(text='Подключено')

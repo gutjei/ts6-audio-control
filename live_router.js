@@ -3,6 +3,7 @@
 const native = Module.load(ROUTER_DLL);
 const api = (name, result, args) => new NativeFunction(native.getExportByName(name), result, args);
 const configure = api('RouterConfigureVolumes','void',['pointer','pointer','uint']);
+const heartbeat = api('RouterHeartbeat','void',[]);
 const stats = api('RouterStats','void',['pointer']);
 const registerCapture = api('RouterRegister','int',['pointer','pointer']);
 const removeCapture = api('RouterRemove','void',['pointer']);
@@ -112,6 +113,7 @@ const observer=Process.attachModuleObserver({onAdded(module) {
     send({event:'hook-ready',hostPid:Process.id});
 }});
 rpc.exports={
+    heartbeat() { if(enabled) heartbeat(); },
     configure(ids, gains) {
         if(ids.length>64 || ids.some(x=>!Number.isInteger(x)||x<=0)) throw new Error('Invalid PID set');
         if(gains==null) gains=ids.map(()=>1);
