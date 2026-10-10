@@ -245,11 +245,17 @@ class App:
         self.root.after(100, wait)
 
 
-if __name__ == '__main__':
+def main():
     root = tk.Tk()
     try:
         app = App(root)
     except Exception as exc:
         messagebox.showerror('TeamSpeak Audio Router', str(exc)); root.destroy()
+        return 1
     else:
         root.mainloop()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

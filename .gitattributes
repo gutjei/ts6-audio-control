@@ -5,3 +5,5 @@
 *.md text eol=lf
 *.cmd text eol=crlf
 *.vbs text eol=crlf
+*.yml text eol=lf
+*.spec text eol=lf

@@ -1,19 +1,19 @@
 import ctypes
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import threading
 import time
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT / '.deps'))
+from app_runtime import ROOT, FROZEN, LOG_DIR, native_library, settings_path, clock_command
+if not FROZEN:
+    sys.path.insert(0, str(ROOT / '.deps'))
 import frida
 from live_policy import compile_rules, decide, resolve
 import settings_store
 
-ROUTER_DLL = ROOT / 'build' / 'audio_router_volume.dll'
+ROUTER_DLL = native_library()
 
 
 class Backend:
@@ -31,13 +31,13 @@ class Backend:
         self.rpc_lock = threading.Lock()
         self.log_lock = threading.Lock()
         self.settings = {'include': r'^firefox\.exe$', 'exclude': r'^teamspeak\.exe$', 'overrides': {}, 'volumes': {}}
-        self.config_path = ROOT / 'settings.json'
+        self.config_path = settings_path()
         if self.config_path.exists():
             try:
                 self.settings = settings_store.load(self.config_path)
             except (ValueError, KeyError, TypeError, OSError) as e:
                 self.emit('error', f'Настройки не прочитаны: {e}')
-        log_dir = ROOT / '_local' / 'logs'
+        log_dir = LOG_DIR
         log_dir.mkdir(parents=True, exist_ok=True)
         self.log = (log_dir / 'gui-router.jsonl').open('a', encoding='utf-8')
         self.thread = threading.Thread(target=self.poll, daemon=True)
@@ -69,7 +69,7 @@ class Backend:
                 argv = ' '.join(p.parameters.get('argv', []))
                 if p.name.lower().startswith('python') and 'trace_audio.py' in argv:
                     raise RuntimeError('Сначала останови прежний trace_audio.py: одновременно два перехвата не поддерживаются.')
-            self.clock = subprocess.Popen([sys.executable, str(ROOT / 'silent_clock.py')], creationflags=subprocess.CREATE_NO_WINDOW)
+            self.clock = subprocess.Popen(clock_command(), creationflags=subprocess.CREATE_NO_WINDOW)
             try:
                 self.ts_pid = mains[0].pid
                 session = self.device.attach(self.ts_pid)
