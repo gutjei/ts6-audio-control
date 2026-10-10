@@ -4,6 +4,7 @@
 # Dependencies and generated build output.
 /.deps/
 /.venv/
+/.idea/
 /build/
 /dist/
 __pycache__/
