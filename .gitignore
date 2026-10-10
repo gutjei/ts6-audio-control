@@ -1,0 +1,22 @@
+# Local development archive: tests, experiments and runtime logs.
+/_local/
+
+# Dependencies and generated build output.
+/.deps/
+/.venv/
+/build/
+__pycache__/
+*.py[cod]
+*.obj
+*.dll
+*.exe
+*.exp
+*.lib
+*.pdb
+
+# Personal settings and diagnostic output.
+/settings.json
+/settings.tmp
+*.log
+*.jsonl
+/logs/
