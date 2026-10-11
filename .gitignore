@@ -1,6 +1,15 @@
 # Local development archive: tests, experiments and runtime logs.
 /_local/
-/tests/
+# Research and tests are local-only, at any directory depth.
+tests/
+test/
+prototypes/
+experiments/
+research/
+test_*
+*_test.*
+*.test.*
+*.spec.*
 
 # Dependencies and generated build output.
 /.deps/
