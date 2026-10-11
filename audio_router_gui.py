@@ -233,6 +233,8 @@ class App(QMainWindow):
         self.snapshot = None
         self.rows = {}
         self.connected = self.closing = self.closed = False
+        self.capture_mode = None
+        self.capture_hint = 'Начните трансляцию со звуком или дождитесь подключения текущей.'
         self.exit_requested = False
         self.connection_busy = False
         self.disconnect_failed = False
@@ -302,7 +304,7 @@ class App(QMainWindow):
         self.connect_button.setObjectName('primary')
         self.connect_button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.connect_button.clicked.connect(self.toggle_connection)
-        self.connect_button.setToolTip('Подключиться к TeamSpeak. При отключении звук управляемой трансляции остановится.')
+        self.connect_button.setToolTip('Подключиться к TeamSpeak, в том числе к уже запущенной трансляции в поддерживаемой версии.')
         connection_layout.addWidget(self.connect_button)
         self.more_button = QToolButton()
         self.more_button.setFixedSize(40, 40)
@@ -590,11 +592,12 @@ class App(QMainWindow):
         help_text = QTextBrowser()
         self.help_text = help_text
         help_text.setPlainText('1. Запустите TeamSpeak и нажмите «Подключить» или включите автоподключение в настройках.\n'
-            '2. Начните новую трансляцию с захватом звука.\n'
+            '2. Включите захват звука в трансляции. Уже запущенный поток подключится автоматически в поддерживаемой версии TeamSpeak.\n'
             '3. Выберите приложения и настройте громкость.\n\n'
             'Список обновляется автоматически. Громкость меняется только в трансляции. '
             '100% — исходный уровень.\n\n'
-            'При отключении или выходе из панели звук управляемой трансляции остановится. '
+            'Если панель подключилась к уже запущенной трансляции, при отключении вернётся её исходный звук. '
+            'Если трансляция началась после подключения панели, при отключении звук остановится. '
             'Если включено «Сворачивать в трей», сворачивание и крестик только скрывают окно; '
             'захват продолжается. Нажмите значок в трее, чтобы открыть окно, или выберите «Выйти» в его меню. '
             'Чтобы вернуть обычный захват, перезапустите трансляцию.')
@@ -762,7 +765,7 @@ class App(QMainWindow):
     def update_auto_ui(self):
         self.connect_button.setEnabled(not self.auto_enabled() and not self.connection_busy and not self.closing)
         self.connect_button.setToolTip('Для ручного управления выключите автоподключение в настройках.'
-                                       if self.auto_enabled() else 'Подключиться к TeamSpeak. При отключении звук управляемой трансляции остановится.')
+                                       if self.auto_enabled() else 'Подключиться к TeamSpeak и управлять звуком трансляции.')
 
     def schedule_auto_connect(self, delay=3000):
         if (self.auto_enabled() and not self.connected and not self.connection_busy
@@ -860,6 +863,8 @@ class App(QMainWindow):
                 self.snapshot = value
                 self.refresh()
             elif kind == 'connecting':
+                self.capture_mode = None
+                self.capture_hint = 'Начните трансляцию со звуком или дождитесь подключения текущей.'
                 self.status.setText('Подключение…')
                 self.stream_status.setText('Подключаем управление звуком к TeamSpeak.')
                 self.stream_status.hide()
@@ -877,8 +882,10 @@ class App(QMainWindow):
                 self.schedule_auto_connect()
             elif kind == 'stats' and self.connected and not self.connection_busy:
                 contexts, sources, packets, audible, errors, code = value[:6]
-                self.stream_status.setText('Начните заново трансляцию с включённым звуком.' if not contexts else 'Поток подключён')
-                self.stream_status.setVisible(bool(errors))
+                self.stream_status.setText(self.capture_hint if not contexts else
+                                           ('Текущая трансляция подключена. При отключении панели вернётся исходный звук.'
+                                            if self.capture_mode == 'existing' else 'Поток подключён'))
+                self.stream_status.setVisible(bool(errors) or not contexts or self.capture_mode == 'existing')
                 self.stats.setText(f'Потоков: {contexts} · Источников: {sources} · Пакетов со звуком: {audible}' + (f' · Ошибка 0x{code:08x} ({errors})' if errors else ''))
                 if errors:
                     self.stream_status.setText('Ошибка аудиопотока. Подробности указаны внизу окна.')
@@ -889,7 +896,7 @@ class App(QMainWindow):
                 self.connection_busy = False
                 self.set_connection_style(True)
                 self.status.setText(f'TeamSpeak подключён ({value})')
-                self.stream_status.setText('Начните заново трансляцию с включённым звуком.')
+                self.stream_status.setText(self.capture_hint)
                 self.connect_button.setText('Отключить')
                 self.connect_button.setEnabled(True)
                 self.auto_timer.stop()
@@ -924,7 +931,9 @@ class App(QMainWindow):
                 self.set_connection_style(False)
                 if kind == 'disconnected':
                     self.status.setText('Отключено от TeamSpeak')
-                    self.stream_status.setText('Для возврата обычного звука перезапустите трансляцию в TeamSpeak.')
+                    self.stream_status.setText('Восстановлен исходный звук трансляции.' if self.capture_mode == 'existing'
+                                               else 'Для возврата обычного звука перезапустите трансляцию в TeamSpeak.')
+                    self.stream_status.show()
                 else:
                     self.status.setText('TeamSpeak закрыт' if value == 'process-terminated' else 'Соединение потеряно')
                     self.stream_status.setText('Запустите TeamSpeak и нажмите «Подключить». Перезапуск панели не нужен.')
@@ -934,7 +943,7 @@ class App(QMainWindow):
                 self.update_auto_ui()
                 if self.auto_enabled():
                     self.status.setText('Ожидание TeamSpeak')
-                    self.stream_status.setText('Подключимся автоматически, когда TeamSpeak будет доступен. После подключения начните трансляцию заново.')
+                    self.stream_status.setText('Подключимся автоматически, когда TeamSpeak будет доступен.')
                     self.schedule_auto_connect()
             elif kind == 'disconnect-error':
                 self.stream_status.show()
@@ -951,6 +960,10 @@ class App(QMainWindow):
             elif kind == 'error':
                 self.notice.setText(value)
                 self.notice.show()
+            elif kind == 'native' and value.get('event') == 'capture-ready':
+                self.capture_mode = value.get('mode', 'new')
+            elif kind == 'native' and value.get('event') == 'late-capture-unavailable':
+                self.capture_hint = value['message']
             elif kind == 'native' and value.get('event') == 'error':
                 self.notice.setText(value.get('message', str(value)))
                 self.notice.show()

@@ -439,7 +439,24 @@ API void RouterShutdown() {
     { std::lock_guard<std::mutex> lock(contextsMutex); for(auto& [k,v]:contexts) { v->requestStop(); all.push_back(v); } }
     for(auto& v:all) if(v->worker.joinable()) v->worker.join();
 }
-API void RouterReset() { terminating=false; }
+API void RouterReset() {
+    // A DLL remains loaded across Frida detach/reattach. Retire old contexts so
+    // the same live capture can register fresh workers. Preserve any PCM pointer
+    // the consumer may still hold from the previous attachment.
+    RouterShutdown();
+    static std::vector<std::vector<BYTE>> retiredBuffers;
+    {
+        std::lock_guard<std::mutex> lock(contextsMutex);
+        for(auto& [key,ctx]:contexts) retiredBuffers.push_back(std::move(ctx->output));
+        contexts.clear();
+    }
+    packets=0; audiblePackets=0; failures=0; lastError=0;
+    sourcePackets=0; sourceLoud=0; sourceQpc=0; sinkQpc=0; sourceFlags=0; sinkFlags=0;
+    writtenFrame=0; readFrame=0; outputEnergy=0; outputSamples=0;
+    workerWakeups=0; droppedFrames=0; captureWakeups=0; renderedSourceFrames=0; missingSourceFrames=0;
+    originalGetBuffer=nullptr;
+    terminating=false;
+}
 
 API int RouterSelfTest() {
     Ring r(8,2); float a[]={0.25f,-0.5f}; r.put(100,a);

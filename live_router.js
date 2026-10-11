@@ -16,6 +16,7 @@ const attached = new Set(), allocations = [];
 const targetModule = typeof TEST_TARGET_MODULE === 'string' ? TEST_TARGET_MODULE : 'teamspeak.dll';
 let getBufferAddress = null;
 let enabled = true;
+let lateListener = null;
 function method(object, slot) { return object.readPointer().add(slot * Process.pointerSize).readPointer(); }
 function once(address, label, callbacks) {
     const key = address.toString() + ':' + label;
@@ -31,6 +32,58 @@ function trackRelease(object) {
             if(captures.delete(this.key)) removeCapture(ptr(this.key));
         }
     });
+}
+function installCapture(capture, format, mode) {
+    const key=capture.toString();
+    if(captures.has(key)) return;
+    const address=method(capture,3);
+    if(getBufferAddress===null) {
+        const original=Interceptor.replaceFast(address,native.getExportByName('RouterGetBuffer'));
+        setOriginal(original); getBufferAddress=address;
+    } else if(!getBufferAddress.equals(address)) {
+        throw new Error('Unexpected second capture implementation');
+    }
+    const result=registerCapture(capture,format);
+    captures.add(key); trackRelease(capture);
+    send({event:'capture-ready',capture:key,result,mode});
+}
+function armLateCapture() {
+    const profile=typeof LATE_CAPTURE_PROFILE==='object' ? LATE_CAPTURE_PROFILE : null;
+    if(!profile) {
+        send({event:'late-capture-unavailable',message:'Для этой версии TeamSpeak начните трансляцию после подключения панели.'});
+        return;
+    }
+    try {
+        const module=Process.getModuleByName(targetModule);
+        if(module.path.replace(/\\/g,'/').toLowerCase()!==profile.path.replace(/\\/g,'/').toLowerCase())
+            throw new Error('Loaded TeamSpeak module differs from the checked file');
+        const bytes=Array.from(new Uint8Array(module.base.add(profile.callsite).readByteArray(profile.signature.length/2)),b=>b.toString(16).padStart(2,'0')).join('');
+        if(bytes!==profile.signature) throw new Error('TeamSpeak capture code does not match the supported profile');
+        // One-shot discovery at the consumer entry, before its first GetBuffer.
+        // Once registered, every PCM packet stays on the native replacement path.
+        lateListener=Interceptor.attach(module.base.add(profile.entry),{
+            onEnter(args) {
+                if(!enabled) return;
+                try {
+                    const owner=args[0], capture=owner.add(profile.capture).readPointer();
+                    if(capture.isNull()) return;
+                    if(!captures.has(capture.toString())) {
+                        const f=owner.add(profile.format);
+                        if(f.readU16()!==1 || f.add(2).readU16()!==2 || f.add(4).readU32()!==48000 ||
+                           f.add(8).readU32()!==192000 || f.add(12).readU16()!==4 || f.add(14).readU16()!==16 || f.add(16).readU16()!==0)
+                            throw new Error('Existing capture has an unsupported format');
+                        installCapture(capture,f,'existing');
+                    }
+                } catch(e) {
+                    send({event:'late-capture-unavailable',message:'Не удалось подключить текущий поток. Начните трансляцию заново.',detail:String(e)});
+                }
+                if(lateListener){lateListener.detach();lateListener=null;}
+            }
+        });
+        send({event:'late-capture-armed'});
+    } catch(e) {
+        send({event:'late-capture-unavailable',message:'Для этой версии TeamSpeak начните трансляцию после подключения панели.',detail:String(e)});
+    }
 }
 function trackClient(object) {
     const key=object.toString(); if(clients.has(key)) return;
@@ -60,16 +113,8 @@ function trackClient(object) {
         onLeave(ret) {
             if(!this.capture || ret.toInt32()<0 || !this.state.format) return;
             const capture=this.output.readPointer();
-            const address=method(capture,3);
-            if(getBufferAddress===null) {
-                const original=Interceptor.replaceFast(address,native.getExportByName('RouterGetBuffer'));
-                setOriginal(original); getBufferAddress=address;
-            } else if(!getBufferAddress.equals(address)) {
-                send({event:'error',message:'Unexpected second capture implementation; silent fallback'}); return;
-            }
-            const result=registerCapture(capture,this.state.format);
-            captures.add(capture.toString()); trackRelease(capture);
-            send({event:'capture-ready',capture:capture.toString(),result});
+            try { installCapture(capture,this.state.format,'new'); }
+            catch(e) { send({event:'error',message:String(e)}); }
         }
     });
 }
@@ -112,6 +157,7 @@ const observer=Process.attachModuleObserver({onAdded(module) {
     });
     send({event:'hook-ready',hostPid:Process.id});
 }});
+armLateCapture();
 rpc.exports={
     heartbeat() { if(enabled) heartbeat(); },
     configure(ids, gains) {
@@ -127,6 +173,6 @@ rpc.exports={
         const out=Memory.alloc(128); stats(out);
         return Array.from({length:16},(_,i)=>Number(out.add(i*8).readU64().toString()));
     },
-    shutdown() { enabled=false; silence(); shutdown(); },
+    shutdown() { enabled=false; if(lateListener){lateListener.detach();lateListener=null;} silence(); shutdown(); },
     selftest() { return api('RouterSelfTest','int',[])(); }
 };

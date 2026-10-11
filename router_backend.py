@@ -13,6 +13,7 @@ from live_policy import compile_rules, resolve
 import settings_store
 from audio_inventory import AudioInventory
 from mixer_control import MixerControl
+from late_capture import profile_for
 
 ROUTER_DLL = native_library()
 
@@ -98,7 +99,9 @@ class Backend:
                 self.detach_state = state
                 session = self.device.attach(self.ts_pid)
                 self.session = session
-                prefix = f'const ROUTER_DLL={json.dumps(str(ROUTER_DLL))}; const SILENT_PID={self.clock.pid};\n'
+                profile = profile_for(mains[0].parameters.get('path'))
+                prefix = (f'const ROUTER_DLL={json.dumps(str(ROUTER_DLL))}; const SILENT_PID={self.clock.pid};\n'
+                          f'const LATE_CAPTURE_PROFILE={json.dumps(profile)};\n')
                 script = session.create_script(prefix + (ROOT / 'live_router.js').read_text(encoding='utf-8'))
                 self.script = script
                 script.on('message', self.on_message)
