@@ -14,6 +14,7 @@ Your applications’ system volume stays unchanged.
 - Adjust each application’s volume from 0 to 200%. Double-click the slider to reset it to 100%.
 - Automatically include or exclude applications using rules.
 - Automatic connection to TeamSpeak, launch at Windows startup, and system tray support.
+- Attach to an already running screen share on the supported TeamSpeak build.
 - Light and dark themes, with saved settings.
 
 ## How it works
