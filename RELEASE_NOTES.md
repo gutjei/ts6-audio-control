@@ -1,27 +1,27 @@
-Первый выпуск TeamSpeak Audio Control для Windows x64.
+# TeamSpeak Audio Control v0.2.0
 
-### Возможности
+A redesigned Qt interface with automatic connection and background operation.
 
-- Выбор приложений для захвата звука галочками.
-- Общие include/exclude regexp по имени exe.
-- Громкость каждого приложения от 0 до 200%, изменение во время трансляции.
-- Сохранение правил и громкости по имени exe, независимо от PID.
-- Самостоятельный exe: Python и средства сборки устанавливать не требуется.
+## What's new
 
-### Запуск
+- A single-page interface with light, dark, and system themes.
+- Only running applications with audio sessions appear in the list; saved preferences are restored when they return.
+- Volume controls occupy half the table. Double-click a slider to reset it to 100%.
+- Automatic connection to TeamSpeak, including reconnection after it restarts.
+- Manual connection controls are disabled while automatic connection is enabled. The connected status shows the TeamSpeak PID.
+- Optional launch at Windows sign-in and minimize/close to the system tray.
+- Improved connection cleanup, standalone Qt packaging, and installation diagnostics.
+- Concise English and Russian documentation.
 
-1. Скачай **TeamSpeakAudioControl.exe** из Assets ниже.
-2. Запусти TeamSpeak 6 и приложение, нажми «Подключить».
-3. Начни заново шаринг с захватом звука; дальнейшие изменения применяются на лету.
+## Getting started
 
-Нужны Windows 11 x64 и TeamSpeak 6 x64. Запускай только одну панель;
-закрой старую Python-версию перед подключением exe.
+1. Download **TeamSpeakAudioControl.exe** from the assets below.
+2. Start TeamSpeak 6 and connect from the panel, or enable automatic connection in settings.
+3. Start a new screen share with audio enabled, then select applications and adjust their volume.
 
-Настройки и журналы находятся в `%LOCALAPPDATA%\TS6AudioControl`.
-Чтобы перенести настройки Python-версии, до первого запуска положи её
-`settings.json` рядом с exe. Существующие настройки релизной версии не заменяются.
+Requires Windows 11 x64 and TeamSpeak 6 x64. Run only one panel at a time.
+Settings are stored in `%LOCALAPPDATA%\TS6AudioControl` and retained across updates.
+Automatic connection does not start TeamSpeak or a screen share. After reconnecting, start the screen share again.
 
-Контрольная сумма файла опубликована в `SHA256SUMS.txt`. Exe не подписан цифровым
-сертификатом. Перехват зависит от версии TeamSpeak; при обновлении клиента может
-потребоваться адаптация. Захватываются деревья процессов, дополнительный буфер
-звука составляет 100 мс. Проверка реальной трансляции у зрителя выполняется отдельно.
+The executable is unsigned. Verify its SHA-256 checksum using `SHA256SUMS.txt`.
+This unofficial tool hooks audio capture in the TeamSpeak process; compatibility may change with TeamSpeak updates.
