@@ -1,10 +1,12 @@
 # Local development archive: tests, experiments and runtime logs.
 /_local/
+/tests/
 
 # Dependencies and generated build output.
 /.deps/
 /.venv/
 /.idea/
+/.vscode/
 /build/
 /dist/
 __pycache__/
@@ -22,3 +24,10 @@ __pycache__/
 *.log
 *.jsonl
 /logs/
+/.pytest_cache/
+/.ruff_cache/
+/.mypy_cache/
+/.coverage
+/htmlcov/
+/coverage.xml
+/diagnostics.json
