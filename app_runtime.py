@@ -14,12 +14,11 @@ LOG_DIR = DATA_DIR / 'logs' if FROZEN else ROOT / '_local' / 'logs'
 
 def native_library():
     source = ROOT / 'build' / 'audio_mixer.dll'
-    if not FROZEN:
-        return source
-    # TeamSpeak can keep the injected DLL loaded after our UI exits. Keep it
-    # outside PyInstaller's temporary extraction directory, keyed by content.
+    # TeamSpeak can keep the injected DLL loaded after our UI exits. A content
+    # address also keeps rebuilds from overwriting a module still used by a target.
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    destination = DATA_DIR / 'native' / digest / source.name
+    cache = DATA_DIR / 'native' if FROZEN else ROOT / 'build' / 'loaded'
+    destination = cache / digest / source.name
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         if hashlib.sha256(destination.read_bytes()).hexdigest() != digest:
@@ -40,9 +39,7 @@ def native_library():
 
 
 def clock_command():
-    if FROZEN:
-        return [sys.executable, '--silent-clock']
-    return [sys.executable, str(ROOT / 'silent_clock.py')]
+    return [str(ROOT / 'build' / 'audio_clock.exe'), '--parent', str(os.getpid())]
 
 
 def settings_path():

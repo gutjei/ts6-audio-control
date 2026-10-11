@@ -1,7 +1,6 @@
 # Build with: python -m PyInstaller --noconfirm TeamSpeakAudioControl.spec
 import os
 import sys
-from PyInstaller.utils.hooks import collect_all
 
 # Qt uses Windows ICU. Unrelated tools on PATH (e.g. Poppler) may ship an
 # incompatible icuuc.dll with version-suffixed exports. Do not bundle those
@@ -11,17 +10,17 @@ os.environ['PATH'] = os.pathsep.join([
     sys.prefix, sys.base_prefix, os.path.join(windows, 'System32'), windows,
 ])
 
-frida_data, frida_binaries, frida_imports = collect_all('frida')
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=frida_binaries + [('build/audio_mixer.dll', 'build'), ('build/audio_inventory.dll', 'build')],
-    datas=frida_data + [('live_router.js', '.'), ('README.md', '.')],
-    hiddenimports=frida_imports,
+    binaries=[('build/audio_mixer.dll', 'build'), ('build/audio_inventory.dll', 'build'),
+              ('build/audio_transport.dll', 'build'), ('build/audio_clock.exe', 'build')],
+    datas=[('README.md', '.'), ('native/vendor/minhook/LICENSE.txt', 'licenses/minhook')],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'PyQt5', 'PyQt6', 'PySide2'],
+    excludes=['tkinter', 'PyQt5', 'PyQt6', 'PySide2', 'frida'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

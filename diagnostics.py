@@ -9,10 +9,12 @@ import traceback
 
 def run(output):
     result = {'ok': False, 'checks': []}
-    child = session = script = root = None
+    child = host = session = script = root = None
     try:
         from PySide6.QtWidgets import QApplication, QWidget
-        from router_backend import frida, ROOT, ROUTER_DLL
+        from app_runtime import native_library
+        from native_transport import Transport
+        ROUTER_DLL = native_library()
         from app_runtime import clock_command
         import ctypes
         application = QApplication.instance() or QApplication([])
@@ -50,23 +52,24 @@ def run(output):
                 time.sleep(.05)
             worker_pid = int(ready.read_text(encoding='ascii'))
             result['checks'].append('silent worker')
-            session = frida.get_local_device().attach(worker_pid)
-            errors = []
-            prefix = f'const ROUTER_DLL={json.dumps(str(ROUTER_DLL))};const SILENT_PID={worker_pid};const TEST_TARGET_MODULE="diagnostics-only.dll";\n'
-            script = session.create_script(prefix + (ROOT / 'live_router.js').read_text(encoding='utf-8'))
-            script.on('message', lambda message, data: errors.append(message) if message['type'] == 'error' else None)
-            script.load()
+            # A second private child hosts the agent; neither child plays audio.
+            host = subprocess.Popen(clock_command(), creationflags=subprocess.CREATE_NO_WINDOW)
+            session = Transport().connect(host.pid, ROUTER_DLL, worker_pid, diagnostic=True)
+            script = session
             if script.exports_sync.selftest() != 0:
                 raise RuntimeError('Injected mixer self-check failed')
             script.exports_sync.configure([], [])
             script.exports_sync.heartbeat()
-            if len(script.exports_sync.stats()) != 16 or errors:
-                raise RuntimeError(f'Frida diagnostic failed: {errors}')
-            result['checks'].append('Frida + bundled JS + injected DLL')
+            if len(script.exports_sync.stats()) != 16:
+                raise RuntimeError('Native IPC diagnostic failed')
+            result['checks'].append('native injection + MinHook + local IPC')
             script.exports_sync.shutdown()
             script = None
             session.detach()
             session = None
+            host.terminate()
+            host.wait(timeout=10)
+            host = None
             child.terminate()
             child.wait(timeout=10)
             child = None
@@ -87,6 +90,9 @@ def run(output):
         if child:
             child.terminate()
             child.wait(timeout=10)
+        if host:
+            host.terminate()
+            host.wait(timeout=10)
         if root:
             root.close()
     Path(output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')

@@ -1,12 +1,8 @@
-"""Executable entry point. Handle the silent worker before importing the GUI."""
+"""Executable entry point; diagnostic mode does not open the control panel."""
 import sys
 
 
 def main():
-    if sys.argv[1:2] == ['--silent-clock']:
-        from silent_clock import main as clock_main
-        clock_main(sys.argv[2:])
-        return 0
     if sys.argv[1:2] == ['--diagnose']:
         if len(sys.argv) != 3:
             return 2

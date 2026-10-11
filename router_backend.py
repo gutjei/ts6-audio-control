@@ -1,19 +1,15 @@
 import json
 import os
 import subprocess
-import sys
 import threading
 import time
 
-from app_runtime import ROOT, FROZEN, LOG_DIR, native_library, settings_path, clock_command
-if not FROZEN:
-    sys.path.insert(0, str(ROOT / '.deps'))
-import frida
+from app_runtime import LOG_DIR, native_library, settings_path, clock_command
+from native_transport import Transport
 from live_policy import compile_rules, resolve
 import settings_store
 from audio_inventory import AudioInventory
 from mixer_control import MixerControl
-from late_capture import profile_for
 
 ROUTER_DLL = native_library()
 
@@ -21,12 +17,11 @@ ROUTER_DLL = native_library()
 class Backend:
     def __init__(self, emit):
         self.emit = emit
-        self.device = frida.get_local_device()
+        self.transport = Transport()
         self.session = self.script = self.clock = None
         self.ts_pid = None
         self.error = None
         self.stop = threading.Event()
-        self.detach_state = None
         self.control = MixerControl()
         self.settings_revision = 0
         self.connection_revision = 0
@@ -78,38 +73,24 @@ class Backend:
             if self.session:
                 self.emit('connected', self.ts_pid)
                 return
-            procs = self.device.enumerate_processes(scope='metadata')
-            mains = [p for p in procs if p.name.lower() == 'teamspeak.exe' and '--type=' not in ' '.join(p.parameters.get('argv', []))]
-            if not mains and wait_for_process:
+            target_pid = self.transport.find_target()
+            if not target_pid and wait_for_process:
                 self.emit('connect-waiting', None)
                 return
-            if len(mains) != 1:
+            if not target_pid:
                 raise RuntimeError('Запусти один экземпляр TeamSpeak и повтори подключение.')
-            for p in procs:
-                argv = ' '.join(p.parameters.get('argv', []))
-                if p.name.lower().startswith('python') and 'trace_audio.py' in argv:
-                    raise RuntimeError('Сначала останови прежний trace_audio.py: одновременно два перехвата не поддерживаются.')
             # Retry cleanup before starting a new worker if a previous one failed.
             self._release_locked()
             self.emit('connecting', None)
             self.clock = subprocess.Popen(clock_command(), creationflags=subprocess.CREATE_NO_WINDOW)
             try:
-                self.ts_pid = mains[0].pid
-                state = {'event': threading.Event(), 'reason': None}
-                self.detach_state = state
-                session = self.device.attach(self.ts_pid)
+                self.ts_pid = target_pid
+                session = self.transport.connect(self.ts_pid, ROUTER_DLL, self.clock.pid)
                 self.session = session
-                profile = profile_for(mains[0].parameters.get('path'))
-                prefix = (f'const ROUTER_DLL={json.dumps(str(ROUTER_DLL))}; const SILENT_PID={self.clock.pid};\n'
-                          f'const LATE_CAPTURE_PROFILE={json.dumps(profile)};\n')
-                script = session.create_script(prefix + (ROOT / 'live_router.js').read_text(encoding='utf-8'))
-                self.script = script
-                script.on('message', self.on_message)
-                session.on('detached', lambda reason, *args: self.on_detached(state, reason))
-                script.load()
-                if script.exports_sync.selftest() != 0:
+                self.script = session
+                if session.selftest() != 0:
                     raise RuntimeError('Самопроверка микшера не прошла')
-                if state['event'].is_set() or session.is_detached:
+                if session.is_detached:
                     raise RuntimeError('TeamSpeak закрылся во время подключения. Запустите его и повторите.')
                 self.control.reset()
                 self.connection_revision += 1
@@ -119,15 +100,9 @@ class Backend:
                 raise
             # Serialize status publication with cleanup and the health worker.
             self.emit('connected', self.ts_pid)
+            self.emit('native', {'event': 'late-capture-unavailable',
+                'message': 'Подключено. Начните трансляцию после подключения панели; уже идущую трансляцию перезапустите.'})
         self.inventory.wake()
-
-    def on_detached(self, state, reason):
-        # Frida may call this during detach() while rpc_lock is held. Only signal
-        # here; each session owns its state so late callbacks cannot end a new one.
-        state['reason'] = reason
-        state['event'].set()
-        if not self.stop.is_set():
-            self.inventory.wake()
 
     def _release_locked(self):
         """Stop routing and release one connection, keeping inventory/settings alive."""
@@ -154,25 +129,18 @@ class Backend:
                 self.clock.kill()
                 self.clock.wait(timeout=5)
             self.clock = None
-        self.detach_state = None
         self.connection_revision += 1
 
     def _handle_detachment_locked(self):
-        if self.detach_state and self.detach_state['event'].is_set():
-            reason = self.detach_state['reason']
+        if self.session and self.session.is_detached:
             self._release_locked()
-            self.emit('detached', reason)
+            self.emit('detached', 'TeamSpeak завершился или канал управления закрыт.')
 
     def disconnect(self):
         with self.rpc_lock:
             self._release_locked()
             self.emit('disconnected', None)
         self.inventory.wake()
-
-    def on_message(self, message, data):
-        event = message.get('payload') if message['type'] == 'send' else {'event': 'error', 'message': message.get('stack', str(message))}
-        self.record(event)
-        self.emit('native', event)
 
     def run(self):
         cached = None
