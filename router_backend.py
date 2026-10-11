@@ -25,7 +25,7 @@ class Backend:
         self.ts_pid = None
         self.error = None
         self.stop = threading.Event()
-        self.detached = threading.Event()
+        self.detach_state = None
         self.control = MixerControl()
         self.settings_revision = 0
         self.connection_revision = 0
@@ -69,49 +69,102 @@ class Backend:
     def refresh_sources(self):
         self.inventory.refresh()
 
-    def connect(self):
+    def connect(self, wait_for_process=False):
         with self.rpc_lock:
             if self.stop.is_set():
                 return
+            self._handle_detachment_locked()
             if self.session:
+                self.emit('connected', self.ts_pid)
                 return
             procs = self.device.enumerate_processes(scope='metadata')
             mains = [p for p in procs if p.name.lower() == 'teamspeak.exe' and '--type=' not in ' '.join(p.parameters.get('argv', []))]
+            if not mains and wait_for_process:
+                self.emit('connect-waiting', None)
+                return
             if len(mains) != 1:
                 raise RuntimeError('Запусти один экземпляр TeamSpeak и повтори подключение.')
             for p in procs:
                 argv = ' '.join(p.parameters.get('argv', []))
                 if p.name.lower().startswith('python') and 'trace_audio.py' in argv:
                     raise RuntimeError('Сначала останови прежний trace_audio.py: одновременно два перехвата не поддерживаются.')
+            # Retry cleanup before starting a new worker if a previous one failed.
+            self._release_locked()
+            self.emit('connecting', None)
             self.clock = subprocess.Popen(clock_command(), creationflags=subprocess.CREATE_NO_WINDOW)
             try:
                 self.ts_pid = mains[0].pid
-                self.detached.clear()
+                state = {'event': threading.Event(), 'reason': None}
+                self.detach_state = state
                 session = self.device.attach(self.ts_pid)
+                self.session = session
                 prefix = f'const ROUTER_DLL={json.dumps(str(ROUTER_DLL))}; const SILENT_PID={self.clock.pid};\n'
                 script = session.create_script(prefix + (ROOT / 'live_router.js').read_text(encoding='utf-8'))
+                self.script = script
                 script.on('message', self.on_message)
-                session.on('detached', self.on_detached)
+                session.on('detached', lambda reason, *args: self.on_detached(state, reason))
                 script.load()
                 if script.exports_sync.selftest() != 0:
                     raise RuntimeError('Самопроверка микшера не прошла')
-                self.session, self.script = session, script
+                if state['event'].is_set() or session.is_detached:
+                    raise RuntimeError('TeamSpeak закрылся во время подключения. Запустите его и повторите.')
                 self.control.reset()
                 self.connection_revision += 1
                 self.error = None
             except Exception:
-                if 'session' in locals():
-                    session.detach()
-                self.clock.terminate(); self.clock.wait(timeout=5); self.clock = None
+                self._release_locked()
                 raise
-        self.emit('connected', self.ts_pid)
+            # Serialize status publication with cleanup and the health worker.
+            self.emit('connected', self.ts_pid)
         self.inventory.wake()
 
-    def on_detached(self, reason, *args):
-        self.detached.set()
-        self.emit('detached', reason)
+    def on_detached(self, state, reason):
+        # Frida may call this during detach() while rpc_lock is held. Only signal
+        # here; each session owns its state so late callbacks cannot end a new one.
+        state['reason'] = reason
+        state['event'].set()
         if not self.stop.is_set():
             self.inventory.wake()
+
+    def _release_locked(self):
+        """Stop routing and release one connection, keeping inventory/settings alive."""
+        if self.script:
+            try:
+                self.script.exports_sync.shutdown()
+            except Exception:
+                pass  # A terminated target no longer accepts RPCs.
+        if self.session:
+            try:
+                self.session.detach()
+            except Exception:
+                if not self.session.is_detached:
+                    raise  # Do not permit a second attachment over an active one.
+        self.script = self.session = None
+        self.ts_pid = None
+        self.control.reset()
+        if self.clock:
+            if self.clock.poll() is None:
+                self.clock.terminate()
+            try:
+                self.clock.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.clock.kill()
+                self.clock.wait(timeout=5)
+            self.clock = None
+        self.detach_state = None
+        self.connection_revision += 1
+
+    def _handle_detachment_locked(self):
+        if self.detach_state and self.detach_state['event'].is_set():
+            reason = self.detach_state['reason']
+            self._release_locked()
+            self.emit('detached', reason)
+
+    def disconnect(self):
+        with self.rpc_lock:
+            self._release_locked()
+            self.emit('disconnected', None)
+        self.inventory.wake()
 
     def on_message(self, message, data):
         event = message.get('payload') if message['type'] == 'send' else {'event': 'error', 'message': message.get('stack', str(message))}
@@ -128,6 +181,9 @@ class Backend:
                 notified = self.inventory.wait(max(0, next_health - time.monotonic()))
                 if self.stop.is_set():
                     break
+                # Handle target exit even if the audio inventory has no snapshot.
+                with self.rpc_lock:
+                    self._handle_detachment_locked()
                 if notified or cached is None:
                     cached = self.inventory.snapshot()
                 if cached is None:
@@ -140,9 +196,7 @@ class Backend:
                 with self.rpc_lock:
                     if self.stop.is_set():
                         break
-                    if self.detached.is_set():
-                        self.script = self.session = None
-                        self.control.reset()
+                    self._handle_detachment_locked()
                     key = revision, settings_revision, self.connection_revision
                     if key != view_key:
                         pid_names = {p['pid']: p['name'].lower() for p in rows}
@@ -184,21 +238,11 @@ class Backend:
         self.stop.set()
         self.inventory.wake()
         # Serialize against an in-flight configure RPC so it cannot unmute after shutdown.
-        with self.rpc_lock:
-            if self.script:
-                try:
-                    self.script.exports_sync.shutdown()
-                except Exception:
-                    pass
-            if self.session:
-                try:
-                    self.session.detach()
-                except Exception:
-                    pass
-            self.script = self.session = None
-        self.thread.join()
-        self.inventory.close()
-        if self.clock:
-            self.clock.terminate(); self.clock.wait(timeout=5); self.clock = None
-        with self.log_lock:
-            self.log.close()
+        try:
+            with self.rpc_lock:
+                self._release_locked()
+        finally:
+            self.thread.join()
+            self.inventory.close()
+            with self.log_lock:
+                self.log.close()

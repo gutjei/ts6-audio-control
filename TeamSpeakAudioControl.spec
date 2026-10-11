@@ -1,5 +1,15 @@
 # Build with: python -m PyInstaller --noconfirm TeamSpeakAudioControl.spec
+import os
+import sys
 from PyInstaller.utils.hooks import collect_all
+
+# Qt uses Windows ICU. Unrelated tools on PATH (e.g. Poppler) may ship an
+# incompatible icuuc.dll with version-suffixed exports. Do not bundle those
+# DLLs or third-party API-set shims; package hooks supply their own DLL paths.
+windows = os.environ['SystemRoot']
+os.environ['PATH'] = os.pathsep.join([
+    sys.prefix, sys.base_prefix, os.path.join(windows, 'System32'), windows,
+])
 
 frida_data, frida_binaries, frida_imports = collect_all('frida')
 a = Analysis(
@@ -11,7 +21,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['tkinter', 'PyQt5', 'PyQt6', 'PySide2'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

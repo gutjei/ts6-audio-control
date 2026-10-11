@@ -11,16 +11,19 @@ def run(output):
     result = {'ok': False, 'checks': []}
     child = session = script = root = None
     try:
-        import tkinter as tk
+        from PySide6.QtWidgets import QApplication, QWidget
         from router_backend import frida, ROOT, ROUTER_DLL
         from app_runtime import clock_command
         import ctypes
-        root = tk.Tk()
-        root.withdraw()
-        root.update()
-        root.destroy()
+        application = QApplication.instance() or QApplication([])
+        root = QWidget()
+        root.resize(320, 200)
+        application.processEvents()
+        if root.grab().isNull():
+            raise RuntimeError('Qt widget rendering failed')
+        root.close()
         root = None
-        result['checks'].append('Tk')
+        result['checks'].append('Qt / PySide6')
         dll = ctypes.CDLL(str(ROUTER_DLL))
         dll.RouterSelfTest.restype = ctypes.c_int
         if dll.RouterSelfTest() != 0:
@@ -85,6 +88,6 @@ def run(output):
             child.terminate()
             child.wait(timeout=10)
         if root:
-            root.destroy()
+            root.close()
     Path(output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     return 0 if result['ok'] else 1

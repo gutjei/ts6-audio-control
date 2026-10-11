@@ -17,6 +17,10 @@ def normalize(settings):
             raise ValueError('Настройки приложений должны использовать имена exe')
     if any(type(v) is not bool for v in overrides.values()):
         raise ValueError('Ручной выбор должен быть true/false')
+    if type(settings.get('minimize_to_tray', False)) is not bool:
+        raise ValueError('Сворачивание в трей должно быть true/false')
+    if type(settings.get('auto_connect', False)) is not bool:
+        raise ValueError('Автоподключение должно быть true/false')
     if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 200 for v in volumes.values()):
         raise ValueError('Громкость должна быть числом от 0 до 200 процентов')
     return {**settings, 'include': include, 'exclude': exclude,
