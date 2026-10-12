@@ -12,6 +12,7 @@ struct Settings {
     QMap<QString, bool> overrides;
     QMap<QString, double> volumes;
     bool automatic = false, tray = false;
+    bool showExcluded = true;
     QString theme = "system";
     static Settings defaults();
     static Settings parse(const QJsonObject& json);

@@ -176,9 +176,14 @@ void Window::refreshRows() {
         connect(widgets.slider, &QSlider::valueChanged, this, edit); connect(widgets.spin, &QSpinBox::valueChanged, this, edit);
         rows[name] = widgets;
     }
-    int selected = 0, blocked = 0; const bool dark = property("darkTheme").toBool();
+    int selected = 0, blocked = 0, visible = 0; const bool dark = property("darkTheme").toBool();
     for(auto i = rows.begin(); i != rows.end(); ++i) {
         const auto name = i.key(); auto& row = i.value(); const bool active = settings.selected(name); selected += active;
+        const bool denied = settings.denied(name);
+        // The anchor moves with its cell widgets when the table is sorted.
+        // Keep excluded applications last, then sort each group by exe name.
+        row.anchor->setText((denied ? QStringLiteral("1:") : QStringLiteral("0:")) + name);
+        visible += settings.showExcluded || !denied;
         const auto conflicts = snapshot.selection.blocked.value(name, snapshot.selection.blocked.value("*"));
         const bool conflict = active && !conflicts.isEmpty(); blocked += conflict;
         QString reason = conflict ? "Ограничение: " + conflicts.join(", ") : settings.denied(name) ? "Исключено" : active ? "Выбрано" : "Не выбрано";
@@ -191,8 +196,13 @@ void Window::refreshRows() {
         const auto background = conflict ? (dark ? "#493b2d" : "#fff4e5") : active ? (dark ? "#303f52" : "#edf3fa") : (dark ? "#292d33" : "#ffffff");
         for(auto cell : row.cells) cell->setStyleSheet(QString("QWidget#captureCell { background: %1; }").arg(background));
     }
-    table->setColumnHidden(3, !blocked); summary->setText(QString("%1 всего · %2 выбрано").arg(rows.size()).arg(selected) + (blocked ? QString(" · %1 заблокировано").arg(blocked) : ""));
-    empty->setText("Нет приложений со звуком. Запустите воспроизведение, чтобы они появились здесь."); empty->setVisible(rows.isEmpty());
+    table->sortItems(0, Qt::AscendingOrder);
+    for(auto i = rows.cbegin(); i != rows.cend(); ++i)
+        table->setRowHidden(i.value().anchor->row(), !settings.showExcluded && settings.denied(i.key()));
+    table->setColumnHidden(3, !blocked); summary->setText(QString("%1 всего · %2 выбрано").arg(visible).arg(selected) + (blocked ? QString(" · %1 заблокировано").arg(blocked) : ""));
+    empty->setText(rows.isEmpty() ? "Нет приложений со звуком. Запустите воспроизведение, чтобы они появились здесь."
+        : "Все приложения исключены. Включите «Показывать исключённые процессы» в настройках, чтобы увидеть их.");
+    empty->setVisible(visible == 0);
 }
 void Window::showSettings() {
     QDialog dialog(this); dialog.setWindowTitle("Настройки"); dialog.resize(530, 410); auto layout = new QVBoxLayout(&dialog);
@@ -200,6 +210,8 @@ void Window::showSettings() {
     auto automatic = new QCheckBox("Автоматически подключаться к TeamSpeak"); automatic->setChecked(settings.automatic); form->addWidget(automatic);
     auto hide = new QCheckBox("Сворачивать в трей при закрытии и сворачивании"); hide->setChecked(settings.tray); form->addWidget(hide);
     auto startup = new QCheckBox("Запускать вместе с Windows"); startup->setChecked(startupEnabled()); form->addWidget(startup);
+    auto showExcluded = new QCheckBox("Показывать исключённые процессы"); showExcluded->setChecked(settings.showExcluded); form->addWidget(showExcluded);
+    showExcluded->setToolTip("Показывать внизу списка приложения, исключённые правилом, и TeamSpeak.");
     form->addWidget(label("Тема оформления", "muted")); auto theme = new QComboBox;
     theme->addItem("Как в системе", "system"); theme->addItem("Светлая", "light"); theme->addItem("Тёмная", "dark");
     theme->setCurrentIndex(theme->findData(settings.theme)); form->addWidget(theme); form->addStretch(); tabs->addTab(general, "Настройки");
@@ -220,6 +232,10 @@ void Window::showSettings() {
         autoTimer.stop();updateConnection();scheduleAutomatic();
     });
     connect(hide,&QCheckBox::toggled,&dialog,[this,hide](bool value) {auto next=settings.json;next["minimize_to_tray"]=value;if(!commit(next)){QSignalBlocker guard(hide);hide->setChecked(settings.tray);}});
+    connect(showExcluded,&QCheckBox::toggled,&dialog,[this,showExcluded](bool value) {
+        auto next=settings.json; next["show_excluded"]=value;
+        if(!commit(next)) {QSignalBlocker guard(showExcluded);showExcluded->setChecked(settings.showExcluded);}
+    });
     connect(startup,&QCheckBox::toggled,&dialog,[this,startup](bool value) {try{setStartup(value);}catch(const std::exception&e){notice->setText(QString::fromUtf8(e.what()));notice->show();QSignalBlocker guard(startup);startup->setChecked(startupEnabled());}});
     connect(theme,&QComboBox::currentIndexChanged,&dialog,[this,theme](int index) {auto next=settings.json;next["theme"]=theme->itemData(index).toString();if(commit(next))applyTheme();else{QSignalBlocker guard(theme);theme->setCurrentIndex(theme->findData(settings.theme));}});
     dialog.exec();

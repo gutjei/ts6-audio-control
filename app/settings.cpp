@@ -16,9 +16,10 @@ Settings Settings::parse(const QJsonObject& source) {
     Settings s; s.json = source;
     for(const auto* key : {"include", "exclude"}) if(!source[key].isString()) invalid("Правила должны быть строками.");
     s.include = expression(source["include"].toString()); s.exclude = expression(source["exclude"].toString());
-    for(const auto* key : {"auto_connect", "minimize_to_tray"})
+    for(const auto* key : {"auto_connect", "minimize_to_tray", "show_excluded"})
         if(source.contains(key) && !source[key].isBool()) invalid("Настройка должна быть true/false: " + QString(key));
     s.automatic = source["auto_connect"].toBool(); s.tray = source["minimize_to_tray"].toBool();
+    s.showExcluded = source["show_excluded"].toBool(true);
     if(source.contains("theme")) {
         s.theme = source["theme"].toString();
         if(s.theme != "system" && s.theme != "dark" && s.theme != "light") invalid("Неизвестная тема оформления.");
