@@ -1,11 +1,17 @@
-# C++ / Qt Widgets preview (unreleased)
+# v0.4.0 — native Qt application and MSI updates
 
-This branch replaces the production Frida integration with a native Windows
+This release replaces the production Frida integration with a native Windows
 controller and agent, and ports the interface to C++17 / Qt Widgets. Python and
 PySide are removed from the production application and build pipeline.
 
 ## Changes
 
+- Per-user MSI installer with a Start menu shortcut and support for upgrading
+  previous installations. Settings are preserved during upgrades and removal.
+- Settings > Updates checks stable GitHub releases and downloads the MSI with
+  SHA-256 verification. A native helper installs it after capture shuts down and
+  restarts the app. Restart TeamSpeak after updating. Portable builds offer the
+  release page instead of installing an MSI over the portable copy.
 - Optional single-file portable EXE automatically extracts and verifies a
   versioned per-user cache; no installer, Python or manual unpacking is required.
 - Portable ZIP with Qt Core, Gui, Widgets and Windows plugins; extract the whole
@@ -31,6 +37,6 @@ TeamSpeak capture. Newly created streams while disconnected use normal capture.
 After updating the injected DLL or using Frida experiments, restart TeamSpeak.
 Settings remain in `%LOCALAPPDATA%\TS6AudioControl` for packaged applications.
 
-This is a development preview pending validation in a real TeamSpeak screen
-share, including listening at the receiving peer. Local WASAPI and offline
-diagnostics do not establish compatibility with every TeamSpeak release.
+End-to-end audio has not yet been validated in a real TeamSpeak screen share
+with listening at the receiving peer. Local WASAPI and offline diagnostics do
+not establish compatibility with every TeamSpeak release.

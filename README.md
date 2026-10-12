@@ -14,6 +14,7 @@ without changing their system volume.
 - Automatic connection, Windows startup and system tray support.
 - Light and dark themes, with saved settings.
 - Single-file portable version without installation or Python.
+- MSI installer with update checking and installation from the settings window.
 
 ## How it works
 
