@@ -46,13 +46,16 @@ $tree = DirectoryXml $Source ''
 $xml = @"
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
  <Package Name="TeamSpeak Audio Control" Manufacturer="TS6 Audio Control" Version="$version"
-          UpgradeCode="{E81AE8B1-1D50-4D29-91AD-40BAA937128B}" Scope="perUser" InstallerVersion="500" Compressed="yes">
-  <MajorUpgrade DowngradeErrorMessage="A newer version of TeamSpeak Audio Control is already installed." AllowSameVersionUpgrades="yes" Schedule="afterInstallInitialize" />
+          UpgradeCode="{E81AE8B1-1D50-4D29-91AD-40BAA937128B}" Scope="perUser" InstallerVersion="500" Compressed="yes" Language="1049" Codepage="1251">
+  <MajorUpgrade DowngradeErrorMessage="Уже установлена более новая версия TeamSpeak Audio Control." AllowSameVersionUpgrades="yes" IgnoreLanguage="yes" Schedule="afterInstallInitialize" />
   <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
   <Launch Condition="Installed OR VersionNT64" Message="64-bit Windows is required." />
   <Property Id="ARPNOMODIFY" Value="1" />
   <Property Id="ARPURLINFOABOUT" Value="https://github.com/gutjei/ts6-audio-control" />
+  <Icon Id="AppIcon.ico" SourceFile="$(Xml "$PSScriptRoot/app/icon.ico")" />
+  <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
   <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+  <UIRef Id="AudioControlWizard" />
   <StandardDirectory Id="LocalAppDataFolder">
    <Directory Id="UserPrograms" Name="Programs">
     <Directory Id="INSTALLFOLDER" Name="TS6AudioControl">
@@ -67,7 +70,7 @@ $xml = @"
   <StandardDirectory Id="ProgramMenuFolder">
    <Directory Id="MenuFolder" Name="TeamSpeak Audio Control">
     <Component Id="MenuShortcut" Guid="*" Bitness="always64">
-     <Shortcut Id="AppShortcut" Name="TeamSpeak Audio Control" Target="[INSTALLFOLDER]TeamSpeakAudioControl.exe" WorkingDirectory="INSTALLFOLDER" />
+     <Shortcut Id="AppShortcut" Name="TeamSpeak Audio Control" Target="[INSTALLFOLDER]TeamSpeakAudioControl.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon.ico" IconIndex="0" />
      <RegistryValue Root="HKCU" Key="Software\TS6AudioControl\Installer" Name="Shortcut" Type="integer" Value="1" KeyPath="yes" />
      <RemoveFolder Id="RemoveMenuFolder" On="uninstall" />
     </Component>
@@ -82,5 +85,10 @@ $xml = @"
 "@
 $xml | Set-Content "$build/Package.wxs" -Encoding utf8
 $env:DOTNET_ROLL_FORWARD = 'Major'
-& $Wix build "$build/Package.wxs" -arch x64 -out "$PSScriptRoot/dist/TeamSpeakAudioControl-windows-x64.msi"
+& $Wix extension add -g WixToolset.UI.wixext/4.0.6
+if ($LASTEXITCODE -ne 0) { throw 'WiX UI extension installation failed' }
+& $Wix build "$build/Package.wxs" "$PSScriptRoot/installer/Wizard.wxs" -arch x64 `
+    -ext WixToolset.UI.wixext/4.0.6 -culture ru-RU -loc "$PSScriptRoot/installer/ru-RU.wxl" `
+    -d "ApplicationFileId=f$(Id '/TeamSpeakAudioControl.exe')" `
+    -out "$PSScriptRoot/dist/TeamSpeakAudioControl-windows-x64.msi"
 if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }

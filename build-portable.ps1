@@ -25,7 +25,7 @@ foreach ($file in (Get-ChildItem -LiteralPath $source -Recurse -File | Sort-Obje
 [IO.File]::WriteAllLines("$work/manifest.txt", [string[]]$manifest, [Text.UTF8Encoding]::new($false))
 & "$env:SystemRoot/System32/makecab.exe" /F "$work/payload.ddf"
 if ($LASTEXITCODE -ne 0) { throw 'CAB compression failed.' }
-@("101 RCDATA `"$($work.Replace('\','/'))/payload.cab`"", "102 RCDATA `"$($work.Replace('\','/'))/manifest.txt`"") |
+@("1 ICON `"$($PSScriptRoot.Replace('\','/'))/app/icon.ico`"", "101 RCDATA `"$($work.Replace('\','/'))/payload.cab`"", "102 RCDATA `"$($work.Replace('\','/'))/manifest.txt`"") |
     Set-Content -LiteralPath "$work/payload.rc" -Encoding ascii
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
 $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath

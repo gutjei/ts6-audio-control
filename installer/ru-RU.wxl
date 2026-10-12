@@ -1,0 +1,4 @@
+<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="ru-RU" Codepage="1251">
+  <String Id="WelcomeDlgDescription" Value="Мастер установит TeamSpeak Audio Control для текущего пользователя. Нажмите «Далее», чтобы продолжить." />
+  <String Id="VerifyReadyDlgInstallText" Value="Папка установки: [INSTALLFOLDER]&#13;&#10;&#13;&#10;В меню «Пуск» появится ярлык приложения. Нажмите «Установить», чтобы начать. Настройки приложения будут сохранены." />
+</WixLocalization>
