@@ -64,9 +64,15 @@ bool Settings::selected(const QString& name) const {
     if(overrides.contains(key)) return overrides[key];
     return !include.pattern().isEmpty() && include.match(name).hasMatch();
 }
-Selection resolve(const QVector<Process>& rows, const Settings& s, const QSet<quint32>& own) {
+Selection resolve(const QVector<Process>& rows, const Settings& s, const QSet<quint32>& own,
+    const QSet<quint32>& audioPids) {
     QMap<quint32, Process> byPid; QSet<quint32> chosen;
-    for(const auto& p : rows) { byPid[p.pid] = p; if(!own.contains(p.pid) && s.selected(p.name)) chosen.insert(p.pid); }
+    // Ancestors are metadata for tree/exclusion checks, not selectable sources.
+    // In particular, .* must not promote an audio app to services.exe or Explorer.
+    for(const auto& p : rows) {
+        byPid[p.pid] = p;
+        if(audioPids.contains(p.pid) && !own.contains(p.pid) && s.selected(p.name)) chosen.insert(p.pid);
+    }
     auto ancestors = [&](quint32 pid) {
         QSet<quint32> seen{pid}, result;
         while(byPid.contains(pid)) {

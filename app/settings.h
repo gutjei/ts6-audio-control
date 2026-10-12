@@ -21,4 +21,5 @@ struct Settings {
     bool denied(const QString& name) const;
 };
 struct Selection { QVector<quint32> pids; QVector<float> gains; QMap<QString, QStringList> blocked; };
-Selection resolve(const QVector<Process>& processes, const Settings& settings, const QSet<quint32>& own);
+Selection resolve(const QVector<Process>& processes, const Settings& settings, const QSet<quint32>& own,
+    const QSet<quint32>& audioPids);

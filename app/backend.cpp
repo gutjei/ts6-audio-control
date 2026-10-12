@@ -76,13 +76,16 @@ void Backend::run() {
             if(hr != E_PENDING && (inventoryRevision != lastInventory || currentRevision != lastSettings)) {
                 state.processes.clear(); state.audio.clear();
                 QMap<quint32, QString> names;
+                QSet<quint32> audioPids;
                 for(unsigned i = 0; i < pc; ++i) {
                     Process p{rows[i].pid, rows[i].parent, QString::fromWCharArray(rows[i].name).toLower()};
                     names[p.pid] = p.name; state.processes.append(p);
                 }
-                for(unsigned i = 0; i < ac; ++i) if(names.contains(audio[i].pid))
+                for(unsigned i = 0; i < ac; ++i) if(names.contains(audio[i].pid)) {
+                    audioPids.insert(audio[i].pid);
                     state.audio[names[audio[i].pid]] = std::max(state.audio.value(names[audio[i].pid]), int(audio[i].state));
-                state.selection = resolve(state.processes, current, {GetCurrentProcessId(), target, clock.pid});
+                }
+                state.selection = resolve(state.processes, current, {GetCurrentProcessId(), target, clock.pid}, audioPids);
                 if(session && (!haveSent || sentPids != state.selection.pids || sentGains != state.selection.gains)) {
                     transport::Request config; config.command = transport::Configure; config.count = unsigned(state.selection.pids.size());
                     for(unsigned i = 0; i < config.count; ++i) { config.pids[i] = state.selection.pids[i]; config.gains[i] = state.selection.gains[i]; }

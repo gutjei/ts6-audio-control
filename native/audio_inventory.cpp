@@ -124,6 +124,10 @@ struct Inventory {
     void addSession(IAudioSessionControl* control) {
         ComPtr<IAudioSessionControl2> c;
         if(FAILED(control->QueryInterface(IID_PPV_ARGS(&c)))) return;
+        // System sounds can be attributed to explorer.exe, not just PID 0.
+        // They are not an application source; capturing the shell's tree would
+        // also capture unrelated applications launched from it.
+        if(c->IsSystemSoundsSession()!=S_FALSE) return;
         DWORD pid=0;
         if(FAILED(c->GetProcessId(&pid)) || !pid) return;
         LPWSTR id=nullptr;
@@ -131,7 +135,9 @@ struct Inventory {
         std::wstring key(id); CoTaskMemFree(id);
         if(sessions.count(key)) return;
         auto item=std::make_unique<Session>(); item->control=c;
-        item->process=OpenProcess(SYNCHRONIZE,FALSE,pid);
+        // Match Source::start's access requirements. Keep inaccessible session
+        // metadata for exclusion checks, but never offer it as a capture source.
+        item->process=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
         item->sink=Make<SessionEvents>(signals);
         HRESULT hr=c->RegisterAudioSessionNotification(item->sink.Get());
         if(FAILED(hr)) { signals->fail(hr); return; }
@@ -169,6 +175,7 @@ struct Inventory {
     }
     void publish() {
         std::map<DWORD,DWORD> active;
+        std::set<DWORD> accessible;
         for(auto i=sessions.begin();i!=sessions.end();) {
             AudioSessionState state=AudioSessionStateExpired;
             DWORD pid=0;
@@ -177,7 +184,9 @@ struct Inventory {
                 FAILED(control->GetState(&state)) || state==AudioSessionStateExpired || FAILED(control->GetProcessId(&pid))) {
                 i=sessions.erase(i); continue;
             }
-            active[pid]=std::max(active[pid],DWORD(state)); ++i;
+            active[pid]=std::max(active[pid],DWORD(state));
+            if(i->second->process) accessible.insert(pid);
+            ++i;
         }
         // Cheap metadata snapshot only on session/device/lifetime events, never a timer.
         HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);
@@ -214,7 +223,7 @@ struct Inventory {
                 exits.emplace(pid,std::move(watch));
         }
         std::vector<AudioRow> output;
-        for(auto [pid,state]:active) if(all.count(pid)) output.push_back({pid,state});
+        for(auto [pid,state]:active) if(all.count(pid) && accessible.count(pid)) output.push_back({pid,state});
         std::lock_guard<std::mutex> lock(mutex);
         bool same=rows.size()==processes.size() && output.size()==audio.size();
         if(same) {
