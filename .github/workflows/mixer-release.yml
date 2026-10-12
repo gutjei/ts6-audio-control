@@ -1,0 +1,88 @@
+name: Mixer build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['mixer-v*']
+    paths: ['native/**', '.github/workflows/mixer-release.yml']
+  pull_request:
+    paths: ['native/**', '.github/workflows/mixer-release.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mixer-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate mixer version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          $version = (Get-Content native/mixer/VERSION -Raw).Trim()
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid mixer version' }
+          if ($env:IS_TAG -eq 'true' -and $env:RELEASE_TAG -cne "mixer-v$version") { throw 'Tag must match native/mixer/VERSION' }
+      - name: Build mixer without Qt
+        shell: pwsh
+        run: |
+          cmake -S native/mixer -B build/mixer -G 'Visual Studio 17 2022' -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'Mixer configure failed' }
+          cmake --build build/mixer --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Mixer build failed' }
+          cmake --install build/mixer --config Release --prefix "$pwd/dist/mixer"
+          if ($LASTEXITCODE -ne 0) { throw 'Mixer install failed' }
+          $hash = (Get-FileHash dist/mixer/audio_mixer.dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  audio_mixer.dll" | Set-Content dist/mixer/SHA256SUMS.txt -Encoding ascii
+          Copy-Item native/vendor/minhook/LICENSE.txt dist/mixer/MinHook-LICENSE.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: audio-mixer-windows-x64
+          path: dist/mixer/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/mixer-v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: audio-mixer-windows-x64
+          path: release
+      - name: Publish mixer without changing Latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft); then
+            if [ "$draft" != true ]; then
+              echo "Release already published; refusing to replace mixer binaries."
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --latest=false \
+              --title "Audio mixer $RELEASE_TAG" --notes-file native/mixer/RELEASE_NOTES.md
+          fi
+          gh release upload "$RELEASE_TAG" release/audio_mixer.dll release/SHA256SUMS.txt release/MinHook-LICENSE.txt --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest=false

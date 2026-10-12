@@ -34,9 +34,16 @@ jobs:
         run: |
           if ($env:RELEASE_TAG -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Release tag must be vMAJOR.MINOR.PATCH' }
           $env:RELEASE_TAG.Substring(1) | Set-Content VERSION -Encoding ascii
-      - name: Build C++ application and portable folder
+      - name: Download pinned mixer release
+        # A GUI release must never silently rebuild the mixer.
+        # The pinned mixer release must already exist.
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./download-mixer.ps1
+      - name: Build application with released mixer
         shell: cmd
-        run: call build-qt.cmd "%CD%\.deps\qt"
+        run: call build-qt.cmd "%CD%\.deps\qt" "%CD%\.deps\mixer\audio_mixer.dll"
       - name: Build single-file portable executable
         shell: pwsh
         run: ./build-portable.ps1
@@ -94,4 +101,4 @@ jobs:
               --title "TeamSpeak Audio Control $RELEASE_TAG" --notes-file RELEASE_NOTES.md
           fi
           gh release upload "$RELEASE_TAG" release/TeamSpeakAudioControl-windows-x64.zip release/TeamSpeakAudioControl-portable.exe release/TeamSpeakAudioControl-windows-x64.msi release/SHA256SUMS.txt --clobber
-          gh release edit "$RELEASE_TAG" --draft=false
+          gh release edit "$RELEASE_TAG" --draft=false --latest

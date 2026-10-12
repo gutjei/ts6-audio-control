@@ -1,13 +1,14 @@
-# v0.4.1 — MSI wizard and application icons
+# v0.4.2 — Connection status and independent mixer releases
 
-- Added a Russian-language MSI installation and maintenance wizard, with
-  installation confirmation, progress, cancellation and optional app launch
-  after installation. Passive updates continue to use the native updater.
-- Fixed missing application icons in the installed EXE, Start menu shortcut,
-  Windows installed-apps list and single-file portable executable.
-- Upgrades from v0.4.0 remain supported despite the installer language change.
+- Fixed a stale mixer warning remaining visible after reconnecting successfully
+  to TeamSpeak. Settings warnings are preserved separately.
+- The application now bundles the independently released mixer v1.0.0.
+  Future GUI-only releases reuse the same DLL instead of rebuilding it.
+- Mixer releases use separate `mixer-v...` tags and do not replace the latest
+  application release used by the in-app updater.
 
-Settings are preserved during upgrades and removal. The experimental option to
-remove settings is not included in this release.
+Settings are preserved during upgrades and removal. MSI and both portable
+packages include the mixer; no separate DLL installation is needed.
 
-Requires Windows 11 x64 and TeamSpeak 6 x64. Restart TeamSpeak after updating.
+Requires Windows 11 x64 and TeamSpeak 6 x64. Restart TeamSpeak after this update
+to load the newly released mixer. Restart an existing stream after reconnecting.

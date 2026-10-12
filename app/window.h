@@ -20,7 +20,7 @@ class Window final : public QMainWindow {
     bool ready = false, connected = false, busy = false, closing = false, stopped = false, exitRequested = false;
     QTimer rulesTimer, volumeTimer, autoTimer;
     QMap<QString, int> pendingVolumes;
-    QLabel *status, *stream, *summary, *notice, *ruleError, *empty;
+    QLabel *status, *stream, *summary, *notice, *backendNotice, *ruleError, *empty;
     QTableWidget* table = nullptr;
     QPushButton* connectButton;
     QLineEdit *include, *exclude;

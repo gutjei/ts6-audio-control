@@ -66,6 +66,7 @@ Window::Window(Settings value, QString directory, const QString& initialError)
     ruleError = label("", "error"); ruleError->setWordWrap(true); ruleError->hide(); grid->addWidget(ruleError, 3, 0, 1, 2);
     layout->addWidget(rules);
     notice = label(initialError, "error"); notice->setWordWrap(true); notice->setVisible(!initialError.isEmpty()); layout->addWidget(notice);
+    backendNotice = label("", "error"); backendNotice->setWordWrap(true); backendNotice->hide(); layout->addWidget(backendNotice);
     connect(rulesToggle, &QToolButton::toggled, this, [rules, rulesToggle](bool visible) { rules->setVisible(visible); rulesToggle->setArrowType(visible ? Qt::DownArrow : Qt::RightArrow); });
     connect(reset, &QPushButton::clicked, this, [this] { auto next = settings.json; next["overrides"] = QJsonObject{}; commit(next); });
     connect(gear, &QToolButton::clicked, this, &Window::showSettings);
@@ -87,12 +88,13 @@ Window::Window(Settings value, QString directory, const QString& initialError)
     connect(backend.get(), &Backend::snapshot, this, [this](ViewState state) { snapshot = std::move(state); ready = true; refreshRows(); });
     connect(backend.get(), &Backend::connection, this, [this](bool active, bool working, const QString& message) {
         connected = active; busy = working; status->setText(working ? "Подключение…" : active ? "Подключено" : "Не подключено");
+        if(active) { backendNotice->clear(); backendNotice->hide(); }
         stream->setText(message); stream->show(); updateConnection(); scheduleAutomatic();
     });
-    connect(backend.get(), &Backend::error, this, [this](const QString& message) { notice->setText(message); notice->show(); });
+    connect(backend.get(), &Backend::error, this, [this](const QString& message) { backendNotice->setText(message); backendNotice->show(); });
     connect(backend.get(), &Backend::statistics, this, [this](const QVector<qulonglong>& stats) {
         if(stats.size() != 16) return;
-        if(stats[4]) { notice->setText(QString("Ошибки микшера: %1; код 0x%2").arg(stats[4]).arg(stats[5], 8, 16, QChar('0'))); notice->show(); }
+        if(stats[4]) { backendNotice->setText(QString("Ошибки микшера: %1; код 0x%2").arg(stats[4]).arg(stats[5], 8, 16, QChar('0'))); backendNotice->show(); }
         if(stats[0] == 0) { stream->setText("Начните трансляцию со звуком после подключения панели. Уже идущую перезапустите."); stream->show(); }
         else { stream->setText("Поток подключён"); stream->hide(); }
     });
