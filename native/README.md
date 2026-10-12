@@ -1,11 +1,11 @@
 # Native integration
 
-The production controller uses `audio_transport.dll` through `native_transport.py`.
-Its C ABI can also be called from a future C++ UI. `audio_mixer.dll` contains the
+The C++/Qt Widgets controller links `transport.cpp` and `audio_inventory.cpp`
+directly into its executable using `controller_api.h`. `audio_mixer.dll` contains the
 agent, COM proxies, MinHook and existing mixer. `audio_clock.exe` is a silent process
 without Python or Qt; it exits when its controlling process exits, including crashes.
-All three are built by `build-native.cmd`; no download or
-file from `_local/` is needed to build the release.
+The application, mixer and clock are built by CMake / `build-qt.cmd`. Production
+does not depend on separate controller DLLs or any file in `_local/`.
 
 ## Attach and capture
 

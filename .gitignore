@@ -1,9 +1,6 @@
 # Local development archive: tests, experiments and runtime logs.
 /_local/
-# Historical Frida research files retained locally, outside the production build.
-/live_router.js
-/late_capture.py
-/silent_clock.py
+# Python/Frida archives live in /_local/experiments/python-frida/.
 # Research and tests are local-only, at any directory depth.
 tests/
 test/

@@ -1,10 +1,17 @@
-# Native backend preview (unreleased)
+# C++ / Qt Widgets preview (unreleased)
 
 This branch replaces the production Frida integration with a native Windows
-controller and agent. The Python/Qt Widgets interface is retained.
+controller and agent, and ports the interface to C++17 / Qt Widgets. Python and
+PySide are removed from the production application and build pipeline.
 
 ## Changes
 
+- Optional single-file portable EXE automatically extracts and verifies a
+  versioned per-user cache; no installer, Python or manual unpacking is required.
+- Portable ZIP with Qt Core, Gui, Widgets and Windows plugins; extract the whole
+  archive before starting the application. Python is not required.
+- Existing JSON settings, volume controls, rules, themes, tray and Windows startup
+  are supported by C++ code. Rules use PCRE2 instead of Python's regex engine.
 - Native DLL loading, a MinHook activation hook, COM audio wrappers and bounded
   local IPC replace Frida and its JavaScript runtime.
 - The silent clock is a small C++ executable without Python or Qt.
