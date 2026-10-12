@@ -12,7 +12,7 @@ int diagnose(const QString& output, const QString& directory);
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     app.setApplicationName("TeamSpeakAudioControl");
-    app.setApplicationVersion("native-qt");
+    app.setApplicationVersion(APP_VERSION);
     app.setQuitOnLastWindowClosed(false);
     QCommandLineParser parser;
     parser.setApplicationDescription("TeamSpeak Audio Control — C++ / Qt Widgets");
@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
     if(parser.isSet("diagnose")) return diagnose(parser.value("diagnose"), directory);
     try {
         if(!QDir().mkpath(directory)) throw std::runtime_error("Не удалось создать каталог настроек.");
+        if(QFileInfo::exists(directory + "/update.lock")) throw std::runtime_error("Выполняется обновление. Дождитесь завершения установки.");
         QLockFile lock(directory + "/controller.lock");
         if(!lock.tryLock()) throw std::runtime_error("Панель уже запущена с этим каталогом настроек.");
         Settings settings = Settings::defaults(); QString error;

@@ -13,6 +13,7 @@ class Window final : public QMainWindow {
     };
     Settings settings;
     QString settingsFile;
+    QString updatePackage, updateDigest;
     std::unique_ptr<Backend> backend;
     QMap<QString, Row> rows;
     ViewState snapshot;

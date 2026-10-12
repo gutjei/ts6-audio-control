@@ -1,5 +1,6 @@
 #include "window.h"
 #include "runtime.h"
+#include "update.h"
 #include <QtWidgets>
 #include <algorithm>
 #include <cmath>
@@ -95,7 +96,15 @@ Window::Window(Settings value, QString directory, const QString& initialError)
         if(stats[0] == 0) { stream->setText("Начните трансляцию со звуком после подключения панели. Уже идущую перезапустите."); stream->show(); }
         else { stream->setText("Поток подключён"); stream->hide(); }
     });
-    connect(backend.get(), &Backend::stopped, this, [this] { stopped = true; tray->hide(); close(); qApp->quit(); });
+    connect(backend.get(), &Backend::stopped, this, [this] {
+        stopped = true; tray->hide();
+        if(!updatePackage.isEmpty()) {
+            QString error;
+            if(!startUpdateHelper(updatePackage, updateDigest, QFileInfo(settingsFile).absolutePath(), error))
+                QMessageBox::critical(this, "Обновление", error + " Запустите приложение и повторите попытку.");
+        }
+        close(); qApp->quit();
+    });
     backend->start(); updateConnection(); scheduleAutomatic();
 }
 Window::~Window() = default;
@@ -194,6 +203,12 @@ void Window::showSettings() {
     theme->setCurrentIndex(theme->findData(settings.theme)); form->addWidget(theme); form->addStretch(); tabs->addTab(general, "Настройки");
     auto help = new QTextBrowser; help->setPlainText("1. Запустите TeamSpeak и подключите панель.\n2. Начните трансляцию со звуком. Уже идущую перезапустите.\n3. Выберите приложения и громкость.\n\nИсключения важнее ручного выбора. Громкость меняется только в трансляции. Двойной клик по ползунку возвращает 100%.\n\nПосле отключения панели управляемый поток станет тихим. Для обычного звука перезапустите трансляцию.\n\nВ режиме трея окно можно вернуть значком; выход — через меню трея.");
     tabs->addTab(help, "Как пользоваться");
+    auto updates = new UpdatePanel; tabs->addTab(updates, "Обновления");
+    connect(updates, &UpdatePanel::installReady, &dialog, [this, &dialog](const QString& package, const QString& digest) {
+        if(!commit(settings.json)) { QMessageBox::critical(&dialog, "Обновление", "Не удалось сохранить настройки. Обновление отменено."); return; }
+        updatePackage = package; updateDigest = digest; exitRequested = true;
+        dialog.accept(); QTimer::singleShot(0, this, &QWidget::close);
+    });
     auto license = new QTextBrowser; QFile text(":/native/vendor/minhook/LICENSE.txt"); const bool licenseAvailable = text.open(QIODevice::ReadOnly);
     license->setPlainText("Qt Widgets: динамическая линковка. Условия Qt и сторонних компонентов находятся в каталоге licenses поставки.\nhttps://www.qt.io/licensing/\n\n" + (licenseAvailable ? QString::fromUtf8(text.readAll()) : QString{})); tabs->addTab(license, "Компоненты");
     auto close = new QPushButton("Закрыть"); layout->addWidget(close,0,Qt::AlignRight); connect(close,&QPushButton::clicked,&dialog,&QDialog::accept);

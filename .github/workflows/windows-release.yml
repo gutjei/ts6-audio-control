@@ -1,8 +1,8 @@
-name: Windows C++ Qt portable
+name: Windows build and release
 
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -26,27 +26,42 @@ jobs:
       - name: Install pinned Qt SDK
         shell: pwsh
         run: ./install-qt.ps1
+      - name: Set release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Release tag must be vMAJOR.MINOR.PATCH' }
+          $env:RELEASE_TAG.Substring(1) | Set-Content VERSION -Encoding ascii
       - name: Build C++ application and portable folder
         shell: cmd
         run: call build-qt.cmd "%CD%\.deps\qt"
       - name: Build single-file portable executable
         shell: pwsh
         run: ./build-portable.ps1
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          dotnet tool install wix --version 4.0.6 --tool-path .deps/wix
+          if ($LASTEXITCODE -ne 0) { throw 'WiX installation failed' }
+          ./build-msi.ps1
       - name: Create portable ZIP and checksums
         shell: pwsh
         run: |
           Compress-Archive -Path dist/qt/* -DestinationPath dist/TeamSpeakAudioControl-windows-x64.zip -CompressionLevel Optimal
-          @('TeamSpeakAudioControl-windows-x64.zip', 'TeamSpeakAudioControl-portable.exe') | ForEach-Object {
+          @('TeamSpeakAudioControl-windows-x64.zip', 'TeamSpeakAudioControl-portable.exe', 'TeamSpeakAudioControl-windows-x64.msi') | ForEach-Object {
             $hash = (Get-FileHash "dist/$_" -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $_"
           } | Set-Content dist/SHA256SUMS.txt -Encoding ascii
-      - name: Upload portable package
+      - name: Upload packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: TeamSpeakAudioControl-windows-x64
           path: |
             dist/TeamSpeakAudioControl-windows-x64.zip
             dist/TeamSpeakAudioControl-portable.exe
+            dist/TeamSpeakAudioControl-windows-x64.msi
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -78,5 +93,5 @@ jobs:
             gh release create "$RELEASE_TAG" --verify-tag --draft \
               --title "TeamSpeak Audio Control $RELEASE_TAG" --notes-file RELEASE_NOTES.md
           fi
-          gh release upload "$RELEASE_TAG" release/TeamSpeakAudioControl-windows-x64.zip release/TeamSpeakAudioControl-portable.exe release/SHA256SUMS.txt --clobber
+          gh release upload "$RELEASE_TAG" release/TeamSpeakAudioControl-windows-x64.zip release/TeamSpeakAudioControl-portable.exe release/TeamSpeakAudioControl-windows-x64.msi release/SHA256SUMS.txt --clobber
           gh release edit "$RELEASE_TAG" --draft=false
